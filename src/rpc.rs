@@ -65,51 +65,6 @@ impl Client {
         .get(action)
     }
 
-    /// Send a request to api service.
-    ///
-    /// if queries is empty, can pass `&[]`
-    #[deprecated(since = "0.3.0", note = "Please use the `get` function instead")]
-    pub fn request(&self, action: &str, queries: &[(&str, &str)]) -> Result<String, Error> {
-        // gen timestamp.
-        let nonce = Local::now().timestamp_subsec_nanos().to_string();
-        let ts = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
-
-        // build params.
-        let mut params = Vec::from(DEFAULT_PARAM);
-        params.push(("Action", &action));
-        params.push(("AccessKeyId", &self.access_key_id));
-        params.push(("SignatureNonce", &nonce));
-        params.push(("Timestamp", &ts));
-        params.push(("Version", &self.version));
-        params.extend_from_slice(&queries);
-        params.sort_by_key(|item| item.0);
-
-        // encode params.
-        let params: Vec<String> = params
-            .into_iter()
-            .map(|(k, v)| format!("{}={}", url_encode(k), url_encode(v)))
-            .collect();
-        let sorted_query_string = params.join("&");
-        let string_to_sign = format!(
-            "GET&{}&{}",
-            url_encode("/"),
-            url_encode(&sorted_query_string)
-        );
-
-        // sign params, get finnal request url.
-        let sign = sign(&format!("{}&", self.access_key_secret), &string_to_sign);
-        let signature = url_encode(&sign);
-        let final_url = format!(
-            "{}?Signature={}&{}",
-            self.endpoint, signature, sorted_query_string
-        );
-
-        // send request.
-        let response = self.http.get(&final_url).send()?.text()?;
-
-        // return response.
-        Ok(response)
-    }
 }
 
 /// The request.
@@ -170,7 +125,7 @@ impl<'a> Request<'a> {
     }
 
     /// Send a request to api service.
-    pub fn send(&self) -> Result<String, Error> {
+    pub async fn send(&self) -> Result<String, Error> {
         // gen timestamp.
         let nonce = Local::now().timestamp_subsec_nanos().to_string();
         let ts = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
@@ -211,7 +166,7 @@ impl<'a> Request<'a> {
         );
 
         // send request.
-        let response = self.http.get(&final_url).send()?.text()?;
+        let response = self.http.get(&final_url).send().await?.text().await?;
 
         // return response.
         Ok(response)
